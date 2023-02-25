@@ -189,6 +189,32 @@ errno = 0;
   return 0;
 }
 
+int left=0,right=0;
+
+int parse_line(char *line)
+{
+  int msec,samples,s[24];
+  int n=sscanf(line,"T+%d: x%d: %d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,",
+	       &msec,&samples,
+	       &s[0+0],&s[0+1],&s[0+2],&s[0+3],
+	       &s[4+0],&s[4+1],&s[4+2],&s[4+3],
+	       &s[8+0],&s[8+1],&s[8+2],&s[4+3],
+	       &s[12+0],&s[12+1],&s[12+2],&s[12+3],
+	       &s[16+0],&s[16+1],&s[16+2],&s[16+3],
+	       &s[20+0],&s[20+1],&s[20+2],&s[20+3]
+	       );
+
+  //  printf("parsed %d fields: msec=%d, samples=%d\n",n,msec,samples);  
+  //  for(int i=0;i<24;i++) printf("s[%d]=%d, ",i,s[i]);
+  //  printf("\n");
+  if (n==26) {
+    // Got complete line
+    int lvalue=s[left];
+    int rvalue=s[right];
+    printf("l=%d,r=%d\n",lvalue,rvalue);
+  }
+}
+
 int main(int argc,char **argv)
 {
   if (argc!=4) {
@@ -196,8 +222,18 @@ int main(int argc,char **argv)
     exit(-1);
   }
   char *serial_port=argv[1];
-  int left=atoi(argv[2]);
-  int right=atoi(argv[3]);
+  left=atoi(argv[2]);
+  right=atoi(argv[3]);
+  if (left<1||left>24) {
+    log_error("Left sensor value must be in range 1 -- 24");
+    exit(-1);
+  }
+  if (right<1||right>24) {
+    log_error("Right sensor value must be in range 1 -- 24");
+    exit(-1);
+  }
+  // Make left and right relative to 0
+  left--; right--;
 
   open_serial_port(serial_port);
 
@@ -207,13 +243,16 @@ int main(int argc,char **argv)
     char buf[8192];
     int n=read(fd,buf,8192);
     if (n>0) {
-      //      log_debug("n=%d",n);
       for(int o=0;o<n;o++) {
 	char c = buf[o];
 	if (c==0x0a||c==0x0d) {
 	  // End of line
 	  if (len) {
-	    log_debug("Read line '%s'",line);
+	    //	    log_debug("Read line '%s'",line);
+	    if (line[0]=='T') {
+	      // It's probably a complete line
+	      parse_line(line);
+	    }
 	    len=0;
 	  }
 	} else {
