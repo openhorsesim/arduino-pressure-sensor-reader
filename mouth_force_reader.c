@@ -189,6 +189,44 @@ errno = 0;
   return 0;
 }
 
+#define MOUTH_HISTORY_LEN 60
+int lhistory[MOUTH_HISTORY_LEN];
+int rhistory[MOUTH_HISTORY_LEN];
+int count=0;
+int lmin=0, lmax=0;
+int rmin=0, rmax=0;
+
+void update_mouth(int l,int r)
+{
+  for(int i=0;i<(MOUTH_HISTORY_LEN-1);i++) {
+    lhistory[i]=lhistory[i+1];
+    rhistory[i]=rhistory[i+1];
+  }
+  lhistory[MOUTH_HISTORY_LEN-1]=l;
+  rhistory[MOUTH_HISTORY_LEN-1]=r;
+
+  lmin=lhistory[MOUTH_HISTORY_LEN-1-count];
+  lmax=lhistory[MOUTH_HISTORY_LEN-1-count];
+  rmin=rhistory[MOUTH_HISTORY_LEN-1-count];
+  rmax=rhistory[MOUTH_HISTORY_LEN-1-count];
+  for(int i=(MOUTH_HISTORY_LEN-count);i<MOUTH_HISTORY_LEN;i++) {
+    if (lhistory[i]<lmin) lmin=lhistory[i];
+    if (lhistory[i]>lmax) lmax=lhistory[i];
+    if (rhistory[i]<rmin) rmin=rhistory[i];
+    if (rhistory[i]>rmax) rmax=rhistory[i];
+  }
+  
+  printf("l=%d(%d..%d),r=%d(%d..%d), count=%d, ol=%d\n",
+	 l,lmin,lmax,
+	 r,rmin,rmax,
+	 count,
+	 lhistory[MOUTH_HISTORY_LEN-count]);
+
+  if (count<(MOUTH_HISTORY_LEN-1)) count++;
+
+  
+}
+
 int left=0,right=0;
 
 int parse_line(char *line)
@@ -211,7 +249,7 @@ int parse_line(char *line)
     // Got complete line
     int lvalue=s[left];
     int rvalue=s[right];
-    printf("l=%d,r=%d\n",lvalue,rvalue);
+    update_mouth(lvalue,rvalue);
   }
 }
 
