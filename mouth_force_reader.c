@@ -80,7 +80,13 @@ void set_serial_speed(int fd, int serial_speed)
   tcflush(fd, TCIFLUSH);
 #else
   log_debug("set_serial_speed: %d bps (termios)", serial_speed);
-  if (serial_speed == 230400) {
+  if (serial_speed == 115200) {
+    if (cfsetospeed(&t, B115200))
+      log_error("failed to set output baud rate");
+    if (cfsetispeed(&t, B115200))
+      log_error("failed to set input baud rate");
+  }
+  else if (serial_speed == 230400) {
     if (cfsetospeed(&t, B230400))
       log_error("failed to set output baud rate");
     if (cfsetispeed(&t, B230400))
@@ -105,6 +111,7 @@ void set_serial_speed(int fd, int serial_speed)
       log_error("failed to set input baud rate");
   }
   else {
+    log_warn("Defaulting to 4mbps");
     if (cfsetospeed(&t, B4000000))
       log_error("failed to set output baud rate");
     if (cfsetispeed(&t, B4000000))
@@ -194,7 +201,31 @@ int main(int argc,char **argv)
 
   open_serial_port(serial_port);
 
-  
+  char line[1024];
+  int len=0;
+  while(1) {
+    char buf[8192];
+    int n=read(fd,buf,8192);
+    if (n>0) {
+      //      log_debug("n=%d",n);
+      for(int o=0;o<n;o++) {
+	char c = buf[o];
+	if (c==0x0a||c==0x0d) {
+	  // End of line
+	  if (len) {
+	    log_debug("Read line '%s'",line);
+	    len=0;
+	  }
+	} else {
+	  // Accumulate line
+	  if (len<1024) {
+	    line[len++]=c;
+	    line[len]=0;
+	  }
+	}
+      }
+    }
+  }
   
   return 0;
 }
