@@ -94,7 +94,7 @@ void loop() {
 
 
   // Select 10M Ohm resistor
-  resistorSelect(10000);
+  resistorSelect(100);
 
   // Select sensor 1 of 4 on each analog input
   sensorSelect(1);
