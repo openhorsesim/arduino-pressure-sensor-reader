@@ -216,13 +216,16 @@ void update_mouth(int l,int r)
     if (rhistory[i]>rmax) rmax=rhistory[i];
   }
   
-  printf("l=%d(%d..%d),r=%d(%d..%d), count=%d, ol=%d\n",
-	 l,lmin,lmax,
-	 r,rmin,rmax,
+  if (count<(MOUTH_HISTORY_LEN-1)) count++;
+
+  float lpercent=100-100.0*(l-lmin)/(lmax-lmin+1);
+  float rpercent=100-100.0*(r-rmin)/(rmax-rmin+1);
+
+  printf("l=%.1f%% %d(%d..%d),r=%.1f%% %d(%d..%d), count=%d, ol=%d\n",
+	 lpercent,l,lmin,lmax,
+	 rpercent,r,rmin,rmax,
 	 count,
 	 lhistory[MOUTH_HISTORY_LEN-count]);
-
-  if (count<(MOUTH_HISTORY_LEN-1)) count++;
 
   
 }
