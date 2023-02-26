@@ -196,6 +196,7 @@ int count=0;
 int lmin=0, lmax=0;
 int rmin=0, rmax=0;
 int lmean=0, rmean=0;
+int loffset=0, roffset=0;
 
 void update_mouth(int l,int r)
 {
@@ -227,6 +228,17 @@ void update_mouth(int l,int r)
     lmean=lsum/sumc;
     rmean=rsum/sumc;
   }
+
+  //  printf(">> %d %d %d\n",l,lmean,loffset);	 
+  if (l<lmean) loffset--;
+  if (l>lmean) loffset++;
+  if (r<rmean) roffset--;
+  if (r>rmean) roffset++;
+
+  if (loffset<-100) loffset=-100;
+  if (loffset>100) loffset=100;
+  if (roffset<-100) roffset=-100;
+  if (roffset>100) roffset=100;
   
   if (count<(MOUTH_HISTORY_LEN-1)) count++;
 
@@ -234,9 +246,22 @@ void update_mouth(int l,int r)
   int rrange=rmax-rmin;
   if (lrange<100) lrange=100;
   if (rrange<100) rrange=100;
+
+#if 0
+  // XXX Not really working code that was supposed to relax bias when idle
+  int lv=l+loffset;
+  if (lv>lmax) lv=lmax;
+  if (lv<lmin) lv=lmin;
+  int rv=r+roffset;
+  if (rv>rmax) rv=rmax;
+  if (rv<rmin) rv=rmin;
+#else
+  int lv=l;
+  int rv=r;
+#endif
   
-  float lpercent=100-100.0*(lmax-l)/lrange;
-  float rpercent=100-100.0*(rmax-r)/rrange;
+  float lpercent=100-100.0*(lmax-lv)/lrange;
+  float rpercent=100-100.0*(rmax-rv)/rrange;
 
   
   
@@ -251,19 +276,20 @@ void update_mouth(int l,int r)
 #if 0
   printf("direction=%.1f, l=%.1f%% %d(%d..%d)/%d,r=%.1f%% %d(%d..%d)/%d, count=%d, ol=%d\n",
 	 bias,
-	 lpercent,l,lmin,lmax,lmean,
-	 rpercent,r,rmin,rmax,rmean,
+	 lpercent,lv,lmin,lmax,lmean,
+	 rpercent,rv,rmin,rmax,rmean,
 	 count,
 	 lhistory[MOUTH_HISTORY_LEN-count]);
   printf("sum=%.1f, lbias=%.1f, rbias=%.1f\n",sum,lbias,rbias);
 #endif
 
+  printf("[");
   float rforce=(lpercent+rpercent)/2;
   for(int i=0;i<32;i++) {
       float t = 100.0-100.0*i/32.0;
       if (rforce<t) printf("#"); else printf(" ");
   }
-  printf("  :  ");
+  printf("]  :  [");
   
   if (bias<0) {
     for(int i=0;i<32;i++) {
@@ -272,7 +298,7 @@ void update_mouth(int l,int r)
       if (bias<t) printf("<"); else printf(" ");
     }
     printf("                                ");    
-  } else if (bias>0) {
+  } else {
     printf("                                ");    
     for(int i=0;i<32;i++) {
       float t = 1.0*i/32.0;
@@ -280,6 +306,11 @@ void update_mouth(int l,int r)
     }
   }
 
+  printf("]  :  %d/%d, %d/%d %d/%d",
+	 (lmax-lv),lrange,
+	 (rmax-rv),rrange,
+	 loffset,roffset
+	 );
   printf("\n");
   
 }
