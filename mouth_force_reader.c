@@ -189,12 +189,13 @@ errno = 0;
   return 0;
 }
 
-#define MOUTH_HISTORY_LEN 60
+#define MOUTH_HISTORY_LEN 128
 int lhistory[MOUTH_HISTORY_LEN];
 int rhistory[MOUTH_HISTORY_LEN];
 int count=0;
 int lmin=0, lmax=0;
 int rmin=0, rmax=0;
+int lmean=0, rmean=0;
 
 void update_mouth(int l,int r)
 {
@@ -205,28 +206,81 @@ void update_mouth(int l,int r)
   lhistory[MOUTH_HISTORY_LEN-1]=l;
   rhistory[MOUTH_HISTORY_LEN-1]=r;
 
+  int lsum=0;
+  int rsum=0;
+  int sumc=0;
+  
   lmin=lhistory[MOUTH_HISTORY_LEN-1-count];
   lmax=lhistory[MOUTH_HISTORY_LEN-1-count];
   rmin=rhistory[MOUTH_HISTORY_LEN-1-count];
   rmax=rhistory[MOUTH_HISTORY_LEN-1-count];
   for(int i=(MOUTH_HISTORY_LEN-count);i<MOUTH_HISTORY_LEN;i++) {
+    lsum+=lhistory[i];
+    rsum+=rhistory[i];
+    sumc++;
     if (lhistory[i]<lmin) lmin=lhistory[i];
     if (lhistory[i]>lmax) lmax=lhistory[i];
     if (rhistory[i]<rmin) rmin=rhistory[i];
     if (rhistory[i]>rmax) rmax=rhistory[i];
   }
+  if (sumc) {
+    lmean=lsum/sumc;
+    rmean=rsum/sumc;
+  }
   
   if (count<(MOUTH_HISTORY_LEN-1)) count++;
 
-  float lpercent=100-100.0*(l-lmin)/(lmax-lmin+1);
-  float rpercent=100-100.0*(r-rmin)/(rmax-rmin+1);
+  int lrange=lmax-lmin;
+  int rrange=rmax-rmin;
+  if (lrange<100) lrange=100;
+  if (rrange<100) rrange=100;
+  
+  float lpercent=100-100.0*(lmax-l)/lrange;
+  float rpercent=100-100.0*(rmax-r)/rrange;
 
-  printf("l=%.1f%% %d(%d..%d),r=%.1f%% %d(%d..%d), count=%d, ol=%d\n",
-	 lpercent,l,lmin,lmax,
-	 rpercent,r,rmin,rmax,
+  
+  
+  // Compute apparent direction based on ratio of L:R force
+  // All L = -1, all R = +1
+  float sum=lpercent+rpercent;
+  if (!sum) sum=1;
+  float lbias=lpercent/sum;
+  float rbias=rpercent/sum;
+  float bias=rbias-lbias;
+
+#if 0
+  printf("direction=%.1f, l=%.1f%% %d(%d..%d)/%d,r=%.1f%% %d(%d..%d)/%d, count=%d, ol=%d\n",
+	 bias,
+	 lpercent,l,lmin,lmax,lmean,
+	 rpercent,r,rmin,rmax,rmean,
 	 count,
 	 lhistory[MOUTH_HISTORY_LEN-count]);
+  printf("sum=%.1f, lbias=%.1f, rbias=%.1f\n",sum,lbias,rbias);
+#endif
 
+  float rforce=(lpercent+rpercent)/2;
+  for(int i=0;i<32;i++) {
+      float t = 100.0-100.0*i/32.0;
+      if (rforce<t) printf("#"); else printf(" ");
+  }
+  printf("  :  ");
+  
+  if (bias<0) {
+    for(int i=0;i<32;i++) {
+      float t = 1.0-1.0*i/32.0;
+      t=-t;
+      if (bias<t) printf("<"); else printf(" ");
+    }
+    printf("                                ");    
+  } else if (bias>0) {
+    printf("                                ");    
+    for(int i=0;i<32;i++) {
+      float t = 1.0*i/32.0;
+      if (bias>t) printf(">"); else printf(" ");
+    }
+  }
+
+  printf("\n");
   
 }
 
