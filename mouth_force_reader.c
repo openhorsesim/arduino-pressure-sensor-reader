@@ -19,6 +19,9 @@
 
 */
 
+#define SHOW_FORCES
+// #define SHOW_RATIOS
+
 #define _GNU_SOURCE
 
 #include <stdio.h>
@@ -37,6 +40,7 @@
 #include <sys/ioctl.h>
 #include <linux/serial.h>
 #include <linux/tty_flags.h>
+#include <math.h>
 
 int fd=-1;
 
@@ -198,6 +202,8 @@ int rmin=0, rmax=0;
 int lmean=0, rmean=0;
 int loffset=0, roffset=0;
 
+float prev_ratio=1;
+
 void update_mouth(int l,int r)
 {
   for(int i=0;i<(MOUTH_HISTORY_LEN-1);i++) {
@@ -263,7 +269,16 @@ void update_mouth(int l,int r)
   float lpercent=100-100.0*(lmax-lv)/lrange;
   float rpercent=100-100.0*(rmax-rv)/rrange;
 
-  
+  float ratio=log((1.0+lmax-lv)/(1.0+rmax-rv))/log(2.0);
+#ifdef SHOW_RATIOS
+  int m = (ratio-prev_ratio)*4+32;
+  if (m<0) m=0; if (m>63) m=63;
+  for(int i=0;i<64;i++) {
+    if (m<i) printf("#"); else printf(" ");
+  }
+  printf("  :: change=%f\n",ratio-prev_ratio);
+#endif  
+  prev_ratio=ratio;
   
   // Compute apparent direction based on ratio of L:R force
   // All L = -1, all R = +1
@@ -283,6 +298,7 @@ void update_mouth(int l,int r)
   printf("sum=%.1f, lbias=%.1f, rbias=%.1f\n",sum,lbias,rbias);
 #endif
 
+#ifdef SHOW_FORCES
   printf("[");
   float rforce=(lpercent+rpercent)/2;
   for(int i=0;i<32;i++) {
@@ -312,6 +328,7 @@ void update_mouth(int l,int r)
 	 loffset,roffset
 	 );
   printf("\n");
+#endif
   
 }
 
