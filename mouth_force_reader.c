@@ -300,25 +300,25 @@ void update_mouth(int l,int r)
 
 #ifdef SHOW_FORCES
   printf("[");
-  float rforce=(lpercent+rpercent)/2;
+  float tforce=(lpercent+rpercent)/2;
   for(int i=0;i<32;i++) {
       float t = 100.0-100.0*i/32.0;
-      if (rforce<t) printf("#"); else printf(" ");
+      if (tforce<t) printf("#"); else printf(" ");
   }
   printf("]  :  [");
   
-  if (bias<0) {
+  if (bias>0) {
     for(int i=0;i<32;i++) {
       float t = 1.0-1.0*i/32.0;
-      t=-t;
-      if (bias<t) printf("<"); else printf(" ");
+      if (bias<t) printf(" "); else printf("<");
     }
     printf("                                ");    
   } else {
     printf("                                ");    
     for(int i=0;i<32;i++) {
       float t = 1.0*i/32.0;
-      if (bias>t) printf(">"); else printf(" ");
+      t=-t;
+      if (bias>t) printf(" "); else printf(">");
     }
   }
 
@@ -350,7 +350,7 @@ int parse_line(char *line)
   //  printf("parsed %d fields: msec=%d, samples=%d\n",n,msec,samples);  
   //  for(int i=0;i<24;i++) printf("s[%d]=%d, ",i,s[i]);
   //  printf("\n");
-  if (n==26) {
+  if (n>=6) {
     // Got complete line
     int lvalue=s[left];
     int rvalue=s[right];
