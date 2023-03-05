@@ -19,6 +19,13 @@
 
 */
 
+
+// Set minimum measurement range.
+// Random noise of about +/- 5 to 10 is normal.
+// Set too low, then dynamic range changes with low pressure causes weirdness.
+// Set too high, it becomes too insensitive "heavy in the mouth"
+#define MIN_RANGE 200
+
 #define SHOW_FORCES
 // #define SHOW_RATIOS
 
@@ -204,7 +211,7 @@ int loffset=0, roffset=0;
 
 float prev_ratio=1;
 
-void update_mouth(int l,int r)
+void update_mouth(int l,int r, int c)
 {
   for(int i=0;i<(MOUTH_HISTORY_LEN-1);i++) {
     lhistory[i]=lhistory[i+1];
@@ -250,8 +257,8 @@ void update_mouth(int l,int r)
 
   int lrange=lmax-lmin;
   int rrange=rmax-rmin;
-  if (lrange<100) lrange=100;
-  if (rrange<100) rrange=100;
+  if (lrange<MIN_RANGE) lrange=MIN_RANGE;
+  if (rrange<MIN_RANGE) rrange=MIN_RANGE;
 
 #if 0
   // XXX Not really working code that was supposed to relax bias when idle
@@ -265,6 +272,7 @@ void update_mouth(int l,int r)
   int lv=l;
   int rv=r;
 #endif
+  int cv=c;
   
   float lpercent=100-100.0*(lmax-lv)/lrange;
   float rpercent=100-100.0*(rmax-rv)/rrange;
@@ -322,17 +330,17 @@ void update_mouth(int l,int r)
     }
   }
 
-  printf("]  :  %d/%d, %d/%d %d/%d",
+  printf("]  :  %d/%d, %d/%d %d/%d/%d",
 	 (lmax-lv),lrange,
 	 (rmax-rv),rrange,
-	 loffset,roffset
+	 loffset,1024-cv,roffset
 	 );
   printf("\n");
 #endif
   
 }
 
-int left=0,right=0;
+int left=0,right=0, centre=0;
 
 int parse_line(char *line)
 {
@@ -354,19 +362,21 @@ int parse_line(char *line)
     // Got complete line
     int lvalue=s[left];
     int rvalue=s[right];
-    update_mouth(lvalue,rvalue);
+    int cvalue=s[centre];
+    update_mouth(lvalue,rvalue,cvalue);
   }
 }
 
 int main(int argc,char **argv)
 {
-  if (argc!=4) {
-    fprintf(stderr,"usage: mouth_force_reader <serialport> <left sensor num> <right sensor num>\n");
+  if (argc!=5) {
+    fprintf(stderr,"usage: mouth_force_reader <serialport> <left sensor num> <right sensor num> <centre sensor num>\n");
     exit(-1);
   }
   char *serial_port=argv[1];
   left=atoi(argv[2]);
   right=atoi(argv[3]);
+  centre=atoi(argv[4]);
   if (left<1||left>24) {
     log_error("Left sensor value must be in range 1 -- 24");
     exit(-1);
