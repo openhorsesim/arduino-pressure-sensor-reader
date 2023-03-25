@@ -378,9 +378,18 @@ int open_mouse(char *path)
     log_crit("could not open mouse input device '%s'", path);
     return -1;
   }
-  fcntl(mousefd, F_SETFL, fcntl(fd, F_GETFL, NULL) | O_NONBLOCK);
+  fcntl(mousefd, F_SETFL, fcntl(mousefd, F_GETFL, NULL) | O_NONBLOCK);
   
   return 0;
+}
+
+unsigned long long gettime_ms()
+{
+  struct timeval nowtv;
+  // If gettimeofday() fails or returns an invalid value, all else is lost!
+  if (gettimeofday(&nowtv, NULL) == -1)
+    perror("gettimeofday");
+  return nowtv.tv_sec * 1000LL + nowtv.tv_usec / 1000;
 }
 
 int main(int argc,char **argv)
@@ -412,12 +421,69 @@ int main(int argc,char **argv)
   open_serial_port(serial_port);
 
   int mouse_x=0;
-  int mouse_x_min=0;
+  int mouse_x_min=-1;
   int mouse_x_max=1;
+  float mouse_x_percent=50;
+  float mouse_x_percent_last=50;
+  int turn_rate_ms=0;
+  int turn_active=0;
+
+  unsigned long long turn_pwm_ms=0;
   
   char line[1024];
   int len=0;
+  long long last_time=0;
   while(1) {
+
+    // Don't burn all CPU time
+    // XXX - Make more efficient using event triggering
+    usleep(1);
+    
+    // Work out where we are in the 1-second PWM cycle
+    long long now=gettime_ms();
+    long long elapsed=now-last_time;
+    last_time=now;
+    if (elapsed>1000) elapsed=1000;
+    turn_pwm_ms+=elapsed;
+
+    //    fprintf(stderr,"DEBUG: turn_pwm_ms=%d, turn_rate_ms=%d\n",turn_pwm_ms,turn_rate_ms);
+    
+    // Implement the 
+    if ((!turn_pwm_ms)||(turn_pwm_ms>999)) {
+      turn_pwm_ms=0;
+      if (mouse_x_percent<45) {
+	// release 'd' and press 'a'
+	if (!turn_active) {
+	  fprintf(stderr,"DEBUG: turn LEFT on\n");
+	  write(outfd,"561\r",3+1);
+	  turn_active=1;
+	}
+      } else if (mouse_x_percent>55) {
+	// release 'a' and press 'd'
+	if (!turn_active) {
+	  fprintf(stderr,"DEBUG: turn RIGHT on\n");
+	  write(outfd,"564\r",3+1);
+	  turn_active=1;
+	}
+      } else {
+	// Cancel turn: release 'a' and 'd' keys
+	if (turn_active) {
+	  fprintf(stderr,"DEBUG: turn --\n");
+	  write(outfd,"664\r661\r",3+1+3+1);
+	  turn_active=0;
+	}
+      }
+    } else {
+      if (turn_pwm_ms>=turn_rate_ms) {
+	// Cancel turn: release 'a' and 'd' keys
+	if (turn_active) {
+	fprintf(stderr,"DEBUG: turn PWM end\n");
+	write(outfd,"664\r661\r",3+1+3+1);
+	turn_active=0;
+	}
+      }
+    }
+    
     char buf[8192];
     int mn=read(mousefd,buf,3);
     if (mn==3) {
@@ -425,9 +491,18 @@ int main(int argc,char **argv)
       mouse_x+=delta_x;
       if (mouse_x<mouse_x_min) mouse_x_min=mouse_x;
       if (mouse_x>mouse_x_max) mouse_x_max=mouse_x;
+      mouse_x_percent_last=mouse_x_percent;
+      mouse_x_percent=100.0*(mouse_x-mouse_x_min)/(mouse_x_max-mouse_x_min+1);
       fprintf(stderr,"DEBUG: Mouse X delta=%d, Mouse X = %d = %.1f%% of travel, range=%d..%d\n",
-	      delta_x,mouse_x,100.0*(mouse_x-mouse_x_min)/(mouse_x_max-mouse_x_min+1),
-	      mouse_x_min,mouse_x_max);
+	      delta_x,mouse_x,mouse_x_percent,mouse_x_min,mouse_x_max);
+      turn_rate_ms=0;
+#define MIN_KEY_DURATION_MS 100.0
+      if (mouse_x_percent>55) {
+	turn_rate_ms=(mouse_x_percent-55)/45.0*(1000.0-MIN_KEY_DURATION_MS);
+      } else if (mouse_x_percent<45) {
+	turn_rate_ms=(45-mouse_x_percent)/45.0*(1000.0-MIN_KEY_DURATION_MS);
+      }
+      fprintf(stderr,"DEBUG: turn PWM = %dms\n",turn_rate_ms);
     }
     int n=read(fd,buf,8192);
     if (n>0) {
