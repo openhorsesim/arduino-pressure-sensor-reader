@@ -155,9 +155,8 @@ void close_serial_port(void)
   close(fd);
 }
 
-int open_serial_port(char *serial_port)
+int open_serial_port(char *serial_port,int serial_speed)
 {
-  int serial_speed=115200;
   
 errno = 0;
   fd = open(serial_port, O_RDWR);
@@ -392,6 +391,24 @@ unsigned long long gettime_ms()
   return nowtv.tv_sec * 1000LL + nowtv.tv_usec / 1000;
 }
 
+void key_press(unsigned char c)
+{
+  char msg[16];
+  snprintf(msg,16,"\r\n5%02x\r\n",c);
+  int len=strlen(msg);
+  int w=write(outfd,msg,strlen(msg));
+  fprintf(stderr,"DEBUG: Wrote %d of %d bytes: '%s'\n",w,len,msg);
+}
+
+void key_release(unsigned char c)
+{
+  char msg[16];
+  snprintf(msg,16,"\r6%02x\r",c);
+  int len=strlen(msg);
+  int w=write(outfd,msg,strlen(msg));
+  fprintf(stderr,"DEBUG: Wrote %d of %d bytes: '%s'\n",w,len,msg);
+}
+
 int main(int argc,char **argv)
 {
   if (argc!=7) {
@@ -416,9 +433,9 @@ int main(int argc,char **argv)
   left--; right--;
 
   open_mouse(mouse_port);
-  open_serial_port(arduino_port);
+  open_serial_port(arduino_port,9600);
   outfd=fd;
-  open_serial_port(serial_port);
+  open_serial_port(serial_port,115200);
 
   int mouse_x=0;
   int mouse_x_min=-1;
@@ -455,21 +472,21 @@ int main(int argc,char **argv)
 	// release 'd' and press 'a'
 	if (!turn_active) {
 	  fprintf(stderr,"DEBUG: turn LEFT on\n");
-	  write(outfd,"561\r",3+1);
+	  key_press(0x61);
 	  turn_active=1;
 	}
       } else if (mouse_x_percent>55) {
 	// release 'a' and press 'd'
 	if (!turn_active) {
 	  fprintf(stderr,"DEBUG: turn RIGHT on\n");
-	  write(outfd,"564\r",3+1);
+	  key_press(0x64);
 	  turn_active=1;
 	}
       } else {
 	// Cancel turn: release 'a' and 'd' keys
 	if (turn_active) {
 	  fprintf(stderr,"DEBUG: turn --\n");
-	  write(outfd,"664\r661\r",3+1+3+1);
+	  key_release(0x64); key_release(0x61);
 	  turn_active=0;
 	}
       }
@@ -478,7 +495,7 @@ int main(int argc,char **argv)
 	// Cancel turn: release 'a' and 'd' keys
 	if (turn_active) {
 	fprintf(stderr,"DEBUG: turn PWM end\n");
-	write(outfd,"664\r661\r",3+1+3+1);
+	key_release(0x64); key_release(0x61);
 	turn_active=0;
 	}
       }

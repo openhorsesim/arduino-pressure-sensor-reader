@@ -6,6 +6,8 @@
 // RX pin has to be change interrupt capable. See:
 // https://docs.arduino.cc/learn/built-in-libraries/software-serial
 // (used to receive instructions for synthetic key/mouse events to generate)
+// Note also that software serial can't read while writing. So we have disabled
+// all the debug output messages
 SoftwareSerial mySerial = SoftwareSerial(8, 9, false);
 
 void setup() {
@@ -38,14 +40,14 @@ void loop() {
       // Special keys
       switch (c) {
         case 'A':  // LSHIFT
-          mySerial.println("Special: LSHIFT");
+	  //          mySerial.println("Special: LSHIFT");
           Keyboard.press(KEY_LEFT_SHIFT);
           Keyboard.flush();
           Keyboard.release(KEY_LEFT_SHIFT);
           Keyboard.flush();
           break;
         case 'Z':  // LCTRL
-          mySerial.println("Special: LCTRL");
+	  //          mySerial.println("Special: LCTRL");
           Keyboard.press(KEY_LEFT_CTRL);
           Keyboard.flush();
           Keyboard.release(KEY_LEFT_CTRL);
@@ -58,11 +60,11 @@ void loop() {
     } else if (c == '\n' || c == '\r') {
       if (digits == 3) {
         char msg[80];
-        snprintf(msg, 80, "Hex = $%03x", hex);
-        mySerial.println(msg);
+	//        snprintf(msg, 80, "Hex = $%03x", hex);
+	//        mySerial.println(msg);
         switch (hex >> 8) {
           case 1:  // Keyboard
-            mySerial.println("Press normal key");
+	    //            mySerial.println("Press normal key");
             {
               char s[2];
               s[0] = hex & 0xff;
@@ -71,15 +73,15 @@ void loop() {
             }
             break;
           case 2:  // Mouse X
-            mySerial.println("Update mouse X");
+	    //            mySerial.println("Update mouse X");
             Mouse.move(hex & 0xff, 0, 0);
             break;
           case 3:  // Mouse Y
-            mySerial.println("Update mouse Y");
+	    //            mySerial.println("Update mouse Y");
             Mouse.move(0, hex & 0xff, 0);
             break;
           case 4:  // Mouse Wheel
-            mySerial.println("Update mouse wheel");
+	    //            mySerial.println("Update mouse wheel");
             Mouse.move(0, 0, hex & 0xff);
             break;
           case 5:  // Direct scan code press
