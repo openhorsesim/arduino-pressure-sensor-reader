@@ -50,6 +50,8 @@
 #include <math.h>
 
 int fd=-1;
+int mousefd=-1;
+int outfd=-1;
 
 #define log_error(...) { fprintf(stderr,"ERROR: "); fprintf(stderr,__VA_ARGS__); fprintf(stderr,"\n"); }
 #define log_crit(...) { fprintf(stderr,"CRITICAL: "); fprintf(stderr,__VA_ARGS__); fprintf(stderr,"\n"); }
@@ -365,18 +367,34 @@ int parse_line(char *line)
     int cvalue=s[centre];
     update_mouth(lvalue,rvalue,cvalue);
   }
+  return 0;
+}
+
+int open_mouse(char *path)
+{
+  errno = 0;
+  mousefd = open(path, O_RDONLY);
+  if (mousefd == -1) {
+    log_crit("could not open mouse input device '%s'", path);
+    return -1;
+  }
+  fcntl(mousefd, F_SETFL, fcntl(fd, F_GETFL, NULL) | O_NONBLOCK);
+  
+  return 0;
 }
 
 int main(int argc,char **argv)
 {
-  if (argc!=5) {
-    fprintf(stderr,"usage: mouth_force_reader <serialport> <left sensor num> <right sensor num> <centre sensor num>\n");
+  if (argc!=7) {
+    fprintf(stderr,"usage: mouth_force_reader <serialport> <mouse port> <arduino port> <left sensor num> <right sensor num> <centre sensor num>\n");
     exit(-1);
   }
   char *serial_port=argv[1];
-  left=atoi(argv[2]);
-  right=atoi(argv[3]);
-  centre=atoi(argv[4]);
+  char *mouse_port=argv[2];
+  char *arduino_port=argv[3];
+  left=atoi(argv[4]);
+  right=atoi(argv[5]);
+  centre=atoi(argv[6]);
   if (left<1||left>24) {
     log_error("Left sensor value must be in range 1 -- 24");
     exit(-1);
@@ -388,12 +406,29 @@ int main(int argc,char **argv)
   // Make left and right relative to 0
   left--; right--;
 
+  open_mouse(mouse_port);
+  open_serial_port(arduino_port);
+  outfd=fd;
   open_serial_port(serial_port);
 
+  int mouse_x=0;
+  int mouse_x_min=0;
+  int mouse_x_max=1;
+  
   char line[1024];
   int len=0;
   while(1) {
     char buf[8192];
+    int mn=read(mousefd,buf,3);
+    if (mn==3) {
+      int delta_x=buf[1];
+      mouse_x+=delta_x;
+      if (mouse_x<mouse_x_min) mouse_x_min=mouse_x;
+      if (mouse_x>mouse_x_max) mouse_x_max=mouse_x;
+      fprintf(stderr,"DEBUG: Mouse X delta=%d, Mouse X = %d = %.1f%% of travel, range=%d..%d\n",
+	      delta_x,mouse_x,100.0*(mouse_x-mouse_x_min)/(mouse_x_max-mouse_x_min+1),
+	      mouse_x_min,mouse_x_max);
+    }
     int n=read(fd,buf,8192);
     if (n>0) {
       for(int o=0;o<n;o++) {
