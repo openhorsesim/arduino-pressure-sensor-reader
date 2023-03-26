@@ -552,9 +552,14 @@ int main(int argc,char **argv)
       
 #define TURN_CHANGE_THRESHOLD 5
       if (turn_rate_ms > (prev_turn_rate_ms+TURN_CHANGE_THRESHOLD)) {
-	fprintf(stderr,"DEBUG: T+%lldms : Tightening turn immediately\n",
+	if (turn_pwm_ms>=turn_rate_ms) {
+	  fprintf(stderr,"DEBUG: T+%lldms : Tightening turn immediately\n",
 		gettime_ms()-start_time);
-	turn_immediate_update=1;	
+	  turn_immediate_update=1;
+	} else {
+	  fprintf(stderr,"DEBUG: T+%lldms : Tightening turn by holding current pulse longer\n",
+		gettime_ms()-start_time);
+	}
       }
       if (turn_rate_ms < (prev_turn_rate_ms-TURN_CHANGE_THRESHOLD)) {
 	fprintf(stderr,"DEBUG: T+%lldms : Relaxing turn immediately\n",
