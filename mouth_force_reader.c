@@ -382,6 +382,8 @@ int open_mouse(char *path)
   return 0;
 }
 
+long long start_time = 0;
+
 unsigned long long gettime_ms()
 {
   struct timeval nowtv;
@@ -397,7 +399,7 @@ void key_press(unsigned char c)
   snprintf(msg,16,"\r\n5%02x\r\n",c);
   int len=strlen(msg);
   int w=write(outfd,msg,strlen(msg));
-  fprintf(stderr,"DEBUG: Wrote %d of %d bytes: '%s'\n",w,len,msg);
+  //  fprintf(stderr,"DEBUG: Wrote %d of %d bytes: '%s'\n",w,len,msg);
 }
 
 void key_release(unsigned char c)
@@ -406,11 +408,14 @@ void key_release(unsigned char c)
   snprintf(msg,16,"\r6%02x\r",c);
   int len=strlen(msg);
   int w=write(outfd,msg,strlen(msg));
-  fprintf(stderr,"DEBUG: Wrote %d of %d bytes: '%s'\n",w,len,msg);
+  //  fprintf(stderr,"DEBUG: Wrote %d of %d bytes: '%s'\n",w,len,msg);
 }
 
 int main(int argc,char **argv)
 {
+
+  start_time = gettime_ms();
+  
   if (argc!=7) {
     fprintf(stderr,"usage: mouth_force_reader <serialport> <mouse port> <arduino port> <left sensor num> <right sensor num> <centre sensor num>\n");
     exit(-1);
@@ -443,9 +448,11 @@ int main(int argc,char **argv)
   float mouse_x_percent=50;
   float mouse_x_percent_last=50;
   int turn_rate_ms=0;
+  int prev_turn_rate_ms=0;
   int turn_active=0;
 
   unsigned long long turn_pwm_ms=0;
+  int turn_immediate_update=0;
   
   char line[1024];
   int len=0;
@@ -456,36 +463,47 @@ int main(int argc,char **argv)
     // XXX - Make more efficient using event triggering
     usleep(1);
     
-    // Work out where we are in the 1-second PWM cycle
+    // Work out where we are in the 1-second PWM cycle    
     long long now=gettime_ms();
     long long elapsed=now-last_time;
+
     last_time=now;
     if (elapsed>1000) elapsed=1000;
     turn_pwm_ms+=elapsed;
 
+
     //    fprintf(stderr,"DEBUG: turn_pwm_ms=%d, turn_rate_ms=%d\n",turn_pwm_ms,turn_rate_ms);
     
-    // Implement the 
-    if ((!turn_pwm_ms)||(turn_pwm_ms>999)) {
+    // Implement the turning of the horse's head in Unbridled by pressing A or D to make turns.
+    // Unbridled requires a key to be down for >100ms, possibly 200ms, before it will start to
+    // turn.  Thus we have a simple PWM encoding of the turn sharpness, with a 1 sec cycle time,
+    // and a minimum duty cycle of 200ms / 1000ms = 20% when turning.
+    // When sharpening or relaxing a turn, we need to take immediate action to give it effect,
+    // so that the horse doesn't feel unresponsive, nor result in strong mis-match between where
+    // you think the horse should be headed and where it is headed.
+
+    // This is the main PWM driver
+    if ((!turn_pwm_ms)||(turn_pwm_ms>999)||turn_immediate_update) {
       turn_pwm_ms=0;
+      turn_immediate_update=0;
       if (mouse_x_percent<45) {
 	// release 'd' and press 'a'
 	if (!turn_active) {
-	  fprintf(stderr,"DEBUG: turn LEFT on\n");
+	  fprintf(stderr,"DEBUG: T+%lldms : turn LEFT on\n",gettime_ms()-start_time);
 	  key_press(0x61);
 	  turn_active=1;
 	}
       } else if (mouse_x_percent>55) {
 	// release 'a' and press 'd'
 	if (!turn_active) {
-	  fprintf(stderr,"DEBUG: turn RIGHT on\n");
+	  fprintf(stderr,"DEBUG: T+%lldms : turn RIGHT on\n",gettime_ms()-start_time);
 	  key_press(0x64);
 	  turn_active=1;
 	}
       } else {
 	// Cancel turn: release 'a' and 'd' keys
 	if (turn_active) {
-	  fprintf(stderr,"DEBUG: turn --\n");
+	  fprintf(stderr,"DEBUG: T+%lldms : turn --\n",gettime_ms()-start_time);
 	  key_release(0x64); key_release(0x61);
 	  turn_active=0;
 	}
@@ -494,23 +512,28 @@ int main(int argc,char **argv)
       if (turn_pwm_ms>=turn_rate_ms) {
 	// Cancel turn: release 'a' and 'd' keys
 	if (turn_active) {
-	fprintf(stderr,"DEBUG: turn PWM end\n");
+	  fprintf(stderr,"DEBUG: T+%lldms : turn PWM end\n",gettime_ms()-start_time);
 	key_release(0x64); key_release(0x61);
 	turn_active=0;
 	}
       }
     }
-    
+
+    // And here we read from the mouse, and work out what the PWM fraction should be
+    // This is also where we need to cause immediate effect, when increasing, decreasing,
+    // cancelling or reversing turns.
     char buf[8192];
     int mn=read(mousefd,buf,3);
     if (mn==3) {
       int delta_x=buf[1];
       mouse_x+=delta_x;
+      prev_turn_rate_ms=turn_rate_ms;
       if (mouse_x<mouse_x_min) mouse_x_min=mouse_x;
       if (mouse_x>mouse_x_max) mouse_x_max=mouse_x;
       mouse_x_percent_last=mouse_x_percent;
       mouse_x_percent=100.0*(mouse_x-mouse_x_min)/(mouse_x_max-mouse_x_min+1);
-      fprintf(stderr,"DEBUG: Mouse X delta=%d, Mouse X = %d = %.1f%% of travel, range=%d..%d\n",
+      fprintf(stderr,"DEBUG: T+%lldms : Mouse X delta=%d, Mouse X = %d = %.1f%% of travel, range=%d..%d\n",
+	      gettime_ms()-start_time,
 	      delta_x,mouse_x,mouse_x_percent,mouse_x_min,mouse_x_max);
       turn_rate_ms=0;
 #define MIN_KEY_DURATION_MS 100.0
@@ -519,7 +542,47 @@ int main(int argc,char **argv)
       } else if (mouse_x_percent<45) {
 	turn_rate_ms=(45-mouse_x_percent)/45.0*(1000.0-MIN_KEY_DURATION_MS);
       }
-      fprintf(stderr,"DEBUG: turn PWM = %dms\n",turn_rate_ms);
+      fprintf(stderr,"DEBUG: T+%lldms : turn PWM = %dms\n",
+	      gettime_ms()-start_time,
+	      turn_rate_ms);
+
+      // Now handle cases where we sharpen, relax, cancel or switch
+      // direction of a turn. These cases should all result in immediate
+      // action, so that the horse feels responsive.
+      
+#define TURN_CHANGE_THRESHOLD 5
+      if (turn_rate_ms > (prev_turn_rate_ms+TURN_CHANGE_THRESHOLD)) {
+	fprintf(stderr,"DEBUG: T+%lldms : Tightening turn immediately\n",
+		gettime_ms()-start_time);
+	turn_immediate_update=1;	
+      }
+      if (turn_rate_ms < (prev_turn_rate_ms-TURN_CHANGE_THRESHOLD)) {
+	fprintf(stderr,"DEBUG: T+%lldms : Relaxing turn immediately\n",
+		gettime_ms()-start_time);
+	// Set time to immediately cancel the turn
+	turn_pwm_ms=turn_rate_ms+1;
+	last_time=gettime_ms();
+      }
+      int this_dir=0;
+      int last_dir=0;
+      if (mouse_x_percent<45) this_dir=-1;
+      if (mouse_x_percent>55) this_dir=+1;
+      if (mouse_x_percent_last<45) last_dir=-1;
+      if (mouse_x_percent_last>55) last_dir=+1;
+      if ((!this_dir)&&(last_dir)) {
+	// Cancelling a turn -- do it immediately
+	fprintf(stderr,"DEBUG: T+%lldms : Stopping turn immediately\n",
+		gettime_ms()-start_time);
+	key_release(0x64); key_release(0x61);
+	turn_active=0;
+      } else {
+	if (this_dir&&last_dir&&(this_dir!=last_dir)) {
+	  fprintf(stderr,"DEBUG: T+%lldms : Changing turn direction immediately: %d vs %d\n",
+		  gettime_ms()-start_time, this_dir, last_dir);
+	  key_release(0x64); key_release(0x61);
+	  turn_immediate_update=1;	
+	}
+      }
     }
     int n=read(fd,buf,8192);
     if (n>0) {
